@@ -1,12 +1,14 @@
 import os
 
+from pprint import pprint
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 from datetime import datetime
-from models import WorkoutEntry
+from models import TrendResult, WorkoutEntry
 from db import fetch_by_exercise, insert_entry, print_table
+
 load_dotenv()
 
 
@@ -16,8 +18,7 @@ class GraphState(TypedDict):
     response: str
     workout: WorkoutEntry | None
     history: list
-
-
+    trend: str
 
 
 # Parse free-form workout text into a validated WorkoutEntry
@@ -55,62 +56,137 @@ def parse_node(state: GraphState):
                 """
 
     workout = structured_model.invoke(prompt)
- 
+
     workout.timestamp = current_timestamp
     return {"workout": workout}
 
-# Fetch the last 5 workouts for the same exercise
+
+# Fetch the last 8 workouts for the same exercise
 def fetch_history_node(state: GraphState):
     workout = state["workout"]
 
     if workout is None:
         return {"history": []}
 
-    rows = fetch_by_exercise(workout.exercise, limit=5)
+    rows = fetch_by_exercise(workout.exercise, limit=8)
 
     history = []
 
     for row in rows:
-        history.append({
-            "id": row[0],
-            "exercise": row[1],
-            "sets": row[2],  # JSON string for now
-            "rpe": row[3],
-            "notes": row[4],
-            "timestamp": row[5],
-        })
+        history.append(
+            {
+                "id": row[0],
+                "exercise": row[1],
+                "sets": row[2],
+                "rpe": row[3],
+                "notes": row[4],
+                "timestamp": row[5],
+            }
+        )
 
     return {"history": history}
+
+
+def analyze_trend_node(state: GraphState):
+
+    workout = state["workout"]
+    history = state["history"]
+
+    if workout is None or not history:
+        return {
+            "trend": "insufficient_history",
+        }
+
+    # Give the LLM the recent workout history and today's workout
+    trend_prompt = f"""
+    Analyze the training trend for this exercise.
+
+    Exercise: {workout.exercise}
+
+    Recent workout history:
+    {history}
+
+    Today's workout:
+    Sets: {workout.sets}
+    RPE: {workout.rpe}
+    Notes: {workout.notes}
+
+    Classify the trend as exactly one of:
+    - progression
+    - plateau
+    - recurring_issue
+
+    Use the exercise type, sets, weight, reps, RPE, notes,
+    and the progression across sessions.
+
+    Do not use rigid numerical rules. Use your judgment
+    based on the actual exercise and training history.
+
+    Return only the trend classification.
+    """
+
+    # Let Gemini interpret the history
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash-lite",
+        temperature=0,
+        google_api_key=os.getenv("GEMINI_API_KEY"),
+    )
+
+    structured_model = model.with_structured_output(TrendResult)
+
+    result = structured_model.invoke(trend_prompt)
+
+    return {
+        "trend": result.trend.lower(),
+    }
 
 
 # Build the graph: START → parse_node → END
 graph_builder = StateGraph(GraphState)
 graph_builder.add_node("parse_node", parse_node)
 graph_builder.add_node("fetch_history_node", fetch_history_node)
-
+graph_builder.add_node("analyze_trend_node", analyze_trend_node)
 graph_builder.add_edge(START, "parse_node")
 graph_builder.add_edge("parse_node", "fetch_history_node")
-graph_builder.add_edge("fetch_history_node", END)
+graph_builder.add_edge("fetch_history_node", "analyze_trend_node")
+graph_builder.add_edge("analyze_trend_node", END)
 graph = graph_builder.compile()
 
 
 if __name__ == "__main__":
     test_entries = [
-    "Bench press: 70kg x 10, 70kg x 8, 65kg x 8. It was challenging but controlled."
+        "Bench press: 77.5kg x 8, 72.5kg x 10, 67.5kg x 8. Felt strong and controlled.",
+        "Bench press: 70kg x 10, 70kg x 8, 65kg x 8. Felt normal today.",
+        "Bench press: 80kg x 5, 75kg x 7, 70kg x 7. Very heavy and difficult.",
+        "Bench press: 67.5kg x 8, 62.5kg x 8, 57.5kg x 8. Shoulder pain returned again.",
+        "Overhead press: 40kg x 8, 40kg x 7, 35kg x 6.",
     ]
 
     for i, journal in enumerate(test_entries, start=1):
-        result = graph.invoke({
-            "message": journal,
-            "response": "",
-            "workout": None,
-            "history": []
-        })
+        result = graph.invoke(
+            {
+                "message": journal,
+                "response": "",
+                "workout": None,
+                "history": [],
+                "trend": "",
+            }
+        )
 
-        print(f"\n--- Test {i} ---")
+        print(f"\n{'=' * 70}")
+        print(f"TEST {i}")
+        print(f"{'=' * 70}")
+
         print(f"Journal: {journal}")
-        print(f"Workout: {result['workout']}")
-        print(f"History: {result['history']}")
-        insert_entry(result['workout'])
 
-    print_table()
+        print("\nWorkout:")
+        pprint(result["workout"].model_dump())
+
+        print(f"\nHistory: {len(result['history'])} previous sessions")
+        print(f"Trend: {result['trend']}")
+
+        print(f"{'=' * 70}")
+
+        insert_entry(result["workout"])
+
+    # print_table()

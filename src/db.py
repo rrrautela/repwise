@@ -73,7 +73,9 @@ def print_table():
 
     # Print table header
     print("\n" + "=" * 100)
-    print(f"{'ID':<5} {'Exercise':<20} {'Sets':<45} {'RPE':<5} {'Notes':<25} {'Timestamp'}")
+    print(
+        f"{'ID':<5} {'Exercise':<20} {'Sets':<45} {'RPE':<5} {'Notes':<25} {'Timestamp'}"
+    )
     print("=" * 100)
 
     # Print every row
@@ -90,7 +92,7 @@ def print_table():
     print("=" * 100)
 
 
-def fetch_by_exercise(exercise, limit=5):
+def fetch_by_exercise(exercise, limit=8):
     # Fetch the most recent sessions for an exercise
     conn = sqlite3.connect(DB_PATH)
 
@@ -111,9 +113,8 @@ def fetch_by_exercise(exercise, limit=5):
     return rows
 
 
-
 if __name__ == "__main__":
-    # Initialize the database 
-    init_db()
+    # Initialize the database
+    # init_db()
     # Print the current contents of the table
-    # print_table()
+    print_table()
