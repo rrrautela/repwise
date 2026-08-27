@@ -4,12 +4,6 @@ from pydantic import BaseModel, Field
 
 from typing import Literal
 
-Literal[
-    "progression",
-    "plateau",
-    "recurring_issue",
-    "insufficient_history",
-]
 
 class SetEntry(BaseModel):
     # Weight used for this individual set in kg
@@ -17,6 +11,7 @@ class SetEntry(BaseModel):
 
     # Reps completed in this individual set
     reps: int
+
 
 class WorkoutEntry(BaseModel):
     # Name of the exercise
@@ -36,3 +31,14 @@ class WorkoutEntry(BaseModel):
         default=None,
         description="Date and time when the workout was performed",
     )
+
+
+class TrendResult(BaseModel):
+    trend: Literal["progression", "plateau", "recurring_issue", "insufficient_history"]
+
+
+class DecisionResult(BaseModel):
+    decision: Literal["progress", "hold", "deload", "flag"]
+    reasoning: str
+    recommendation: str
+
