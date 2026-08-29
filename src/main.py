@@ -212,7 +212,38 @@ def decide_node(state: GraphState):
         "recommendation": result.recommendation,
     }
 
-# Build the graph: START → parse_node → END
+# Generate a short plain-language recommendation based on the decision and trend
+def advise_node(state: GraphState):
+
+    decision = state["decision"]
+    trend = state["trend"]
+
+    advise_prompt = f"""
+    Give the athlete a short, plain-language training recommendation.
+
+    Decision:
+    {decision}
+
+    Training trend:
+    {trend}
+
+    Rules:
+    - Keep the recommendation concise and actionable.
+    - Explain what the athlete should do next.
+    - Do not introduce a new training decision.
+    - Do not contradict the provided decision.
+    - Use simple language suitable for an athlete.
+
+    Return only the recommendation.
+    """
+
+    response = model.invoke(advise_prompt)
+
+    return {
+        "recommendation": response.content,
+    }
+
+# Build the LangGraph state machine
 graph_builder = StateGraph(GraphState)
 
 # Add nodes to the graph
@@ -220,6 +251,7 @@ graph_builder.add_node("parse_node", parse_node)
 graph_builder.add_node("fetch_history_node", fetch_history_node)
 graph_builder.add_node("analyze_trend_node", analyze_trend_node)
 graph_builder.add_node("decide_node", decide_node)
+graph_builder.add_node("advise_node", advise_node)
 
 # Connect the nodes in the desired order
 graph_builder.add_edge(START, "parse_node")
@@ -234,54 +266,45 @@ graph_builder.add_conditional_edges(
     "decide_node",
     route_decision,
     {
-        "progress": END,
-        "hold": END,
-        "deload": END,
-        "flag": END,
+        "progress": "advise_node",
+        "hold": "advise_node",
+        "deload": "advise_node",
+        "flag": "advise_node",
     },
 )
+graph_builder.add_edge("advise_node", END)
+
 graph = graph_builder.compile()
 
-
 if __name__ == "__main__":
-    test_entries = [
-        "Bench press: 77.5kg x 8, 72.5kg x 10, 67.5kg x 8. Felt strong and controlled.",
-        "Bench press: 70kg x 10, 70kg x 8, 65kg x 8. Felt normal today.",
-        "Bench press: 80kg x 5, 75kg x 7, 70kg x 7. Very heavy and difficult.",
-        "Bench press: 67.5kg x 8, 62.5kg x 8, 57.5kg x 8. Shoulder pain returned again.",
-        "Overhead press: 40kg x 8, 40kg x 7, 35kg x 6.",
-    ]
 
-    for i, journal in enumerate(test_entries, start=1):
-        result = graph.invoke(
-            {
-                "message": journal,
-                "response": "",
-                "workout": None,
-                "history": [],
-                "trend": "",
-                "decision": "",
-                "reasoning": "",
-                "recommendation": "",
-            }
-        )
+    journal = """
+    Bench press:
+    80kg x 8
+    80kg x 8
+    80kg x 7
 
-        print(f"\n{'=' * 70}")
-        print(f"TEST {i}")
-        print(f"{'=' * 70}")
+    Felt strong today. Last set was difficult but controlled.
+    """
 
-        print(f"Journal: {journal}")
+    result = graph.invoke(
+        {
+            "message": journal,
+            "response": "",
+            "workout": None,
+            "history": [],
+            "trend": "",
+            "decision": "",
+            "reasoning": "",
+            "recommendation": "",
+        }
+    )
 
-        print("\nWorkout:")
-        pprint(result["workout"].model_dump())
+    print("\nWorkout:")
+    pprint(result["workout"].model_dump())
 
-        print(f"\nHistory: {len(result['history'])} previous sessions")
-        print(f"Trend: {result['trend']}")
-        print(f"Decision: {result['decision']}")
-        print(f"Reasoning: {result['reasoning']}")
-        print(f"Recommendation: {result['recommendation']}")
-        print(f"{'=' * 70}")
-
-        insert_entry(result["workout"])
-
-    # print_table()
+    print(f"\nHistory: {len(result['history'])} previous sessions")
+    print(f"Trend: {result['trend']}")
+    print(f"Decision: {result['decision']}")
+    print(f"Reasoning: {result['reasoning']}")
+    print(f"Recommendation: {result['recommendation']}")
