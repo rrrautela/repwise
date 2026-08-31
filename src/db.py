@@ -113,6 +113,26 @@ def fetch_by_exercise(exercise, limit=8):
     return rows
 
 
+def fetch_exercises():
+    conn = sqlite3.connect(DB_PATH)
+
+    cursor = conn.execute(
+        """
+        SELECT DISTINCT exercise
+        FROM workout_entries
+        ORDER BY exercise
+        """
+    )
+
+    exercises = [
+        row[0]
+        for row in cursor.fetchall()
+    ]
+
+    conn.close()
+
+    return exercises
+
 if __name__ == "__main__":
     # Initialize the database
     # init_db()

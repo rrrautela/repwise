@@ -276,18 +276,10 @@ graph_builder.add_edge("advise_node", END)
 
 graph = graph_builder.compile()
 
-if __name__ == "__main__":
 
-    journal = """
-    Bench press:
-    80kg x 8
-    80kg x 8
-    80kg x 7
 
-    Felt strong today. Last set was difficult but controlled.
-    """
-
-    result = graph.invoke(
+def run_workout(journal: str):
+    return graph.invoke(
         {
             "message": journal,
             "response": "",
@@ -300,9 +292,24 @@ if __name__ == "__main__":
         }
     )
 
+
+if __name__ == "__main__":
+
+    #manual test
+
+    journal = """
+    Bench press:
+    80kg x 8
+    80kg x 8
+    80kg x 7
+
+    Felt strong today. Last set was difficult but controlled.
+    """
+
+    result = run_workout(journal)
+
     print("\nWorkout:")
     pprint(result["workout"].model_dump())
-
     print(f"\nHistory: {len(result['history'])} previous sessions")
     print(f"Trend: {result['trend']}")
     print(f"Decision: {result['decision']}")
