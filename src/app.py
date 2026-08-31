@@ -456,7 +456,9 @@ with log_tab:
             try:
                 result = run_workout(journal)
 
+                pr_before_insert = 0.0
                 if result["workout"] is not None:
+                    pr_before_insert = get_all_time_pr(result["workout"].exercise)
                     insert_entry(result["workout"])
                     get_global_stats.clear()
 
@@ -521,8 +523,8 @@ with log_tab:
 
                 st.markdown(f"**Exercise:** {workout.exercise}")
 
-                pr = get_all_time_pr(workout.exercise)
                 today_max = max(s.weight for s in workout.sets)
+
 
                 pills = "".join(
                     f'<span class="rw-set-pill">{s.weight}kg × {s.reps}</span>'
@@ -530,7 +532,7 @@ with log_tab:
                 )
                 pr_tag = (
                     '<span class="rw-pr">🏆 PR MATCHED/BEATEN</span>'
-                    if today_max >= pr
+                    if today_max >= pr_before_insert
                     else ""
                 )
 
